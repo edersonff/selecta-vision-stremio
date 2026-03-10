@@ -15,6 +15,33 @@ from config import (
 from scraper import Episode
 
 
+DBZ_SEASONS = [
+    (1, 39),
+    (40, 74),
+    (75, 107),
+    (108, 139),
+    (140, 165),
+    (166, 194),
+    (195, 219),
+    (220, 253),
+    (254, 291),
+]
+
+
+def get_season(episode_number: int) -> int:
+    for season, (start, end) in enumerate(DBZ_SEASONS, 1):
+        if start <= episode_number <= end:
+            return season
+    return 1
+
+
+def get_season_episode(episode_number: int) -> int:
+    for season, (start, end) in enumerate(DBZ_SEASONS, 1):
+        if start <= episode_number <= end:
+            return episode_number - start + 1
+    return episode_number
+
+
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -81,8 +108,10 @@ def generate_addon_files(
 
         for episode in episodes:
             stream_data = build_stream(episode, series_key)
+            season = get_season(episode.number)
+            season_ep = get_season_episode(episode.number)
             for series_id in template["ids"]:
-                stream_id = f"{series_id}:1:{episode.number}"
+                stream_id = f"{series_id}:{season}:{season_ep}"
                 write_json(
                     f"{output_dir}/stream/series/{stream_id}.json",
                     stream_data,
