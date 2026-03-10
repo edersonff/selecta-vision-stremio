@@ -1,56 +1,44 @@
 # SelectaVision Stremio Addon
 
-A community-maintained Stremio addon that provides access to Dragon Ball and Dragon Ball Z from Selecta Vision restoration project.
+Stremio addon for Dragon Ball Z in Blu-ray 1080p with Dual Audio.
 
-## Disclaimer
+## About
 
-This addon is **independent and unofficial**. It is not affiliated with, maintained by, or endorsed by the Selecta Vision team.
+This addon provides Dragon Ball Z (1989-1996) in high quality, using the Spanish Blu-ray from Selecta Vision as video source.
 
-If you are the content owner and believe this should be removed, contact: ederr@ederr.com
+## Content
 
-## What is this?
+**Dragon Ball Z – 1989/1996**
+- **Video**: AVC / 4:3 / 23.976 FPS / 1080p
+- **Bitrates**: 30.000 kbps / 10.000 kbps / 2.500 kbps
+- **Audio**: Dual Audio (PT-BR / JP) in FLAC
+  - Portuguese Brazil (Álamo) – FLAC 2.0 / 48 kHz / 313 kbps
+  - Japanese – FLAC 2.0 / 48 kHz / 512 kbps
 
-A Stremio addon that provides Dragon Ball and Dragon Ball Z episodes from Selecta Vision. The videos are:
-- **1080p NTSC 23.976fps**
-- **H.264 video**
-- **Dual audio** (Japanese, Portuguese)
-- **Multiple subtitle tracks**
+## Source
 
-## How it works
+- **Video**: Selecta Vision Blu-ray (Spain)
+- **Audio**: Ripped from Crunchyroll via Prime Video
 
-The addon uses a **static + proxy** architecture:
-1. Python script scrapes Drime links from MemoriaTV
-2. Cloudflare Worker proxies HLS streams with authentication
-3. GitHub Actions deploys daily
-4. Stremio fetches stream URLs from the Worker
-
-## Stack
-
-- **Python 3.11** - scraping and generation
-- **Cloudflare Workers** - HLS proxy with KV storage
-- **GitHub Actions** - daily builds and deployments
-- **GitHub Pages** - static hosting for addon manifest
-
-## Install in Stremio
+## Install
 
 1. Open Stremio
-2. Go to Settings (gear icon)
-3. Click "Add addon"
-4. Paste: `https://edersonff.github.io/selecta-vision-stremio/manifest.json`
-5. Click "Install"
+2. Go to Settings → Addons
+3. Paste: `https://edersonff.github.io/selecta-vision-stremio/manifest.json`
+4. Click Install
 
-## Environment Variables
+## Architecture
 
-### Cloudflare Worker
-- `CF_ACCOUNT_ID` - Cloudflare account ID
-- `CF_KV_NAMESPACE_ID` - KV namespace for cookies
-- `CF_API_TOKEN` - Cloudflare API token
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  MemoriaTV  │────▶│    Worker    │────▶│   Stremio   │
+│   (Drime)   │     │ (Cloudflare) │     │   (Addon)   │
+└─────────────┘     └──────────────┘     └─────────────┘
+```
 
-### Cookie Refresh
-- `CF_ACCOUNT_ID`
-- `CF_KV_NAMESPACE_ID`
-- `CF_API_TOKEN`
-- `DRIME_HASH` - Drime share link hash
+- **Python**: Scraper that extracts Drime links from MemoriaTV
+- **Cloudflare Worker**: HLS proxy with cookie authentication
+- **GitHub Actions**: Auto-refresh every 90 minutes
 
 ## Local Development
 
@@ -61,11 +49,31 @@ npm install
 npx wrangler dev --local
 
 # Addon
-cd addon
-cd src
+cd addon/src
 python main.py
 ```
 
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `CF_ACCOUNT_ID` | Cloudflare Account ID |
+| `CF_KV_NAMESPACE_ID` | KV Namespace for cookies |
+| `CF_API_TOKEN` | Cloudflare API Token |
+| `DRIME_HASH` | Drime share link hash |
+
+## Disclaimer
+
+This addon is independent and not affiliated with Selecta Vision or MemoriaTV.
+
+If you are the rights holder and want this addon removed, contact: ederr@ederr.com
+
+## Credits
+
+- **Video**: Selecta Vision (Spanish Blu-ray)
+- **Audio**: Crunchyroll / Prime Video
+- **Original Project**: MemoriaTV (CaNNiBal)
+
 ## License
 
-MIT License
+MIT
