@@ -149,7 +149,7 @@ def scrape_series(series_key: str, cookies: str, xsrf: str) -> List[Episode]:
                 continue
 
             stream_uuid = match_uuid.group(1)
-            hls_url = f"{WORKER_BASE}/master/{stream_uuid}/1080p"
+            hls_url = f"{WORKER_BASE}/master/{stream_uuid}/playlist.m3u8"
 
             episodes.append(
                 Episode(

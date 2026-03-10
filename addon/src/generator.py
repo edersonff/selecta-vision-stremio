@@ -82,6 +82,7 @@ def build_stream(episode: Episode, series_key: str) -> dict:
                 "name": ADDON_NAME,
                 "title": f"{template['name']} Ep.{episode.number:02d} · {STREAM_RESOLUTION} · NTSC {STREAM_FPS}fps · ~6GB",
                 "behaviorHints": {
+                    "notWebReady": True,
                     "bingeGroup": f"selectavision-{series_key}",
                     "filename": f"{template['name']}.{episode.number:02d}.SelectaVision.{STREAM_RESOLUTION}.mkv",
                     "videoSize": VIDEO_SIZE_APPROX,
