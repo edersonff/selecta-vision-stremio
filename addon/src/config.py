@@ -37,12 +37,12 @@ SERIES_TEMPLATES = {
     "dbz": {
         "ids": ["tt0121220", "tt0214341"],
         "name": "Dragon Ball Z",
-        "poster": "https://www.memoriadatv.com/wp-content/uploads/2023/08/dbz-logo.png",
+        "poster": "https://static.vakinha.com.br/uploads/vakinha/image/566433/mtv.png?ims=700x410",
     },
     "db": {
         "ids": ["tt0088509", "tt0280249"],
         "name": "Dragon Ball",
-        "poster": "https://www.memoriadatv.com/wp-content/uploads/2023/08/db-logo.png",
+        "poster": "https://static.vakinha.com.br/uploads/vakinha/image/566433/mtv.png?ims=700x410",
     },
 }
 
