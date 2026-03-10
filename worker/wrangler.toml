@@ -1,0 +1,8 @@
+name = "selecta-vision-proxy"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+account_id = "e7b04d8b608cd1bd89d8c58b6fd0ea50"
+
+[[kv_namespaces]]
+binding = "DRIME_COOKIES"
+id = "a9dbb683fbe141a88c7920fa9feba487"
