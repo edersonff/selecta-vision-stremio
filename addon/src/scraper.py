@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 
 
 MEMORIA_PAGES = {
-    "dbz": "https://www.memoriadatv.com/dragon-ball-z-1989-1996-dual-audio-bluray-1080p/",
+    "dbz": "https://memoriadatv.com/baixar/dbzggghhthy",
     "db": "https://www.memoriadatv.com/dragon-ball-1986-1989-dual-audio-bluray-1080p/",
 }
 
