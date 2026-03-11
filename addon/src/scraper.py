@@ -1,5 +1,4 @@
 import re
-import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -53,40 +52,9 @@ def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
     if not url:
         return []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        page.goto(url, wait_until="networkidle")
-
-        # Find download link
-        dl_href = page.evaluate("""() => {
-            const links = Array.from(document.querySelectorAll('a'));
-            const link = links.find(a => a.href.includes('/baixar/'));
-            return link ? link.href : null;
-        }""")
-
-        if not dl_href:
-            browser.close()
-            return []
-
-        page.goto(dl_href, wait_until="networkidle")
-        page.wait_for_timeout(3000)
-
-        # Get all Drime links
-        hashes = page.evaluate("""() => {
-            const links = Array.from(document.querySelectorAll('a'));
-            return links
-                .filter(a => a.href.includes('dri.me/'))
-                .map(a => {
-                    const match = a.href.match(/dri\\.me\\/([a-zA-Z0-9]+)/);
-                    return match ? match[1] : null;
-                })
-                .filter(Boolean);
-        }""")
-
-        browser.close()
-        return list(dict.fromkeys(hashes))
+    resp = requests.get(url)
+    hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', resp.text)
+    return list(dict.fromkeys(hashes))
 
 
 def fetch_drime_files(
@@ -123,7 +91,6 @@ def parse_episode_number(filename: str, series_key: str) -> Optional[int]:
         if match:
             return int(match.group(1))
 
-    # Fallback: look for any 3-digit number
     match = re.search(r"\.(\d{3})\.", filename)
     if match:
         return int(match.group(1))
