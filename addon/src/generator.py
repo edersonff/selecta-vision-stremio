@@ -78,11 +78,11 @@ def build_stream(episode: Episode, series_key: str) -> dict:
     return {
         "streams": [
             {
-                "url": episode.hls_url,
+                "url": episode.direct_url,
                 "name": ADDON_NAME,
                 "title": f"{template['name']} Ep.{episode.number:02d} · {STREAM_RESOLUTION} · NTSC {STREAM_FPS}fps · ~6GB",
                 "behaviorHints": {
-                    "notWebReady": True,
+                    "notWebReady": False,
                     "bingeGroup": f"selectavision-{series_key}",
                     "filename": f"{template['name']}.{episode.number:02d}.SelectaVision.{STREAM_RESOLUTION}.mkv",
                     "videoSize": VIDEO_SIZE_APPROX,

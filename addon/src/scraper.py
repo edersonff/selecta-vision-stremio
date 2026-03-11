@@ -21,9 +21,9 @@ class Episode:
     series_key: str
     number: int
     filename: str
-    drime_hash: str
-    stream_uuid: str
-    hls_url: str
+    file_hash: str
+    shareable_link_id: str
+    direct_url: str
 
 
 def get_drime_cookies() -> tuple[str, str]:
@@ -89,7 +89,9 @@ def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
         return list(dict.fromkeys(hashes))
 
 
-def fetch_drime_files(drime_hash: str, cookies: str, xsrf: str) -> List[dict]:
+def fetch_drime_files(
+    drime_hash: str, cookies: str, xsrf: str
+) -> tuple[List[dict], str]:
     api_url = (
         f"https://app.drime.cloud/api/v1/shareable-links/{drime_hash}?withEntries=true"
     )
@@ -102,10 +104,12 @@ def fetch_drime_files(drime_hash: str, cookies: str, xsrf: str) -> List[dict]:
 
     resp = requests.get(api_url, headers=headers)
     if resp.status_code != 200:
-        return []
+        return [], ""
 
     data = resp.json()
-    return data.get("folderChildren", {}).get("data", [])
+    shareable_link_id = str(data.get("link", {}).get("id", ""))
+    files = data.get("folderChildren", {}).get("data", [])
+    return files, shareable_link_id
 
 
 def parse_episode_number(filename: str, series_key: str) -> Optional[int]:
@@ -133,7 +137,10 @@ def scrape_series(series_key: str, cookies: str, xsrf: str) -> List[Episode]:
 
     episodes = []
     for drime_hash in hashes:
-        files = fetch_drime_files(drime_hash, cookies, xsrf)
+        files, shareable_link_id = fetch_drime_files(drime_hash, cookies, xsrf)
+
+        if not shareable_link_id:
+            continue
 
         for f in files:
             name = f.get("name", "")
@@ -142,27 +149,23 @@ def scrape_series(series_key: str, cookies: str, xsrf: str) -> List[Episode]:
             if not ep_num:
                 continue
 
-            thumbnail = f.get("thumbnail_url", "") or ""
-            match_uuid = re.search(r"stream\.drime\.cloud\/([a-f0-9-]+)\/", thumbnail)
-
-            if not match_uuid:
+            file_hash = f.get("hash", "")
+            if not file_hash:
                 continue
 
-            stream_uuid = match_uuid.group(1)
-            hls_url = f"{WORKER_BASE}/master/{stream_uuid}/playlist.m3u8"
+            direct_url = f"{WORKER_BASE}/direct/{file_hash}/{shareable_link_id}.mkv"
 
             episodes.append(
                 Episode(
                     series_key=series_key,
                     number=ep_num,
                     filename=name,
-                    drime_hash=drime_hash,
-                    stream_uuid=stream_uuid,
-                    hls_url=hls_url,
+                    file_hash=file_hash,
+                    shareable_link_id=shareable_link_id,
+                    direct_url=direct_url,
                 )
             )
 
-    # Deduplicate by episode number (keep first found)
     seen = set()
     unique = []
     for ep in episodes:

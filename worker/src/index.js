@@ -29,6 +29,12 @@ export default {
       return this.proxyMaster(uuid, quality, url.origin, env);
     }
 
+    const directMatch = url.pathname.match(/^\/direct\/([^/]+)\/(\d+)\.mkv$/);
+    if (directMatch) {
+      const [, fileHash, shareableLinkId] = directMatch;
+      return this.proxyDirect(fileHash, shareableLinkId, env);
+    }
+
     return new Response('Not found', { status: 404 });
   },
 
@@ -72,6 +78,56 @@ export default {
     return new Response(upstream.body, {
       headers: { 'Content-Type': upstream.headers.get('content-type') || 'video/mp2t', 'Access-Control-Allow-Origin': '*' },
     });
+  },
+
+  async proxyDirect(fileHash, shareableLinkId, env) {
+    const cookie = await env.DRIME_COOKIES.get('drime_cookie');
+    if (!cookie) {
+      return Response.json({ error: 'Cookie not set' }, { status: 503 });
+    }
+
+    const xsrfMatch = cookie.match(/XSRF-TOKEN=([^;]+)/);
+    const xsrf = xsrfMatch ? decodeURIComponent(xsrfMatch[1]) : '';
+
+    const targetUrl = `https://app.drime.cloud/api/v1/file-entries/download/${fileHash}?shareable_link=${shareableLinkId}`;
+
+    const upstream = await fetch(targetUrl, {
+      headers: {
+        Cookie: cookie,
+        'x-xsrf-token': xsrf,
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Referer': 'https://app.drime.cloud/',
+        'Accept': '*/*',
+      },
+    });
+
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      return Response.json({ 
+        error: 'Upstream failed', 
+        status: upstream.status, 
+        url: targetUrl,
+        text: text.slice(0, 500)
+      }, { status: upstream.status });
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'video/x-matroska';
+    const contentLength = upstream.headers.get('content-length');
+    const acceptRanges = upstream.headers.get('accept-ranges');
+
+    const headers = {
+      'Content-Type': contentType,
+      'Content-Disposition': 'attachment; filename="video.mkv"',
+      'Accept-Ranges': acceptRanges || 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Range',
+    };
+
+    if (contentLength) {
+      headers['Content-Length'] = contentLength;
+    }
+
+    return new Response(upstream.body, { headers });
   },
 
   async proxyMaster(uuid, quality, workerBase, env) {
