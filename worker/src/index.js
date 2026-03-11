@@ -1,5 +1,5 @@
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
@@ -32,7 +32,7 @@ export default {
     const directMatch = url.pathname.match(/^\/direct\/([^/]+)\/(\d+)\.mkv$/);
     if (directMatch) {
       const [, fileHash, shareableLinkId] = directMatch;
-      return this.proxyDirect(fileHash, shareableLinkId, env);
+      return this.proxyDirect(request, fileHash, shareableLinkId, env, ctx);
     }
 
     return new Response('Not found', { status: 404 });
@@ -80,10 +80,18 @@ export default {
     });
   },
 
-  async proxyDirect(fileHash, shareableLinkId, env) {
+  async getDownloadUrl(fileHash, shareableLinkId, env, ctx) {
+    const cache = caches.default;
+    const cacheKey = `https://drime-cache.internal/download/${fileHash}/${shareableLinkId}`;
+
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      return await cached.text();
+    }
+
     const cookie = await env.DRIME_COOKIES.get('drime_cookie');
     if (!cookie) {
-      return Response.json({ error: 'Cookie not set' }, { status: 503 });
+      throw new Error('Cookie not set');
     }
 
     const xsrfMatch = cookie.match(/XSRF-TOKEN=([^;]+)/);
@@ -103,31 +111,64 @@ export default {
 
     if (!upstream.ok) {
       const text = await upstream.text();
-      return Response.json({ 
-        error: 'Upstream failed', 
-        status: upstream.status, 
-        url: targetUrl,
-        text: text.slice(0, 500)
-      }, { status: upstream.status });
+      throw new Error(`Upstream failed: ${upstream.status} - ${text.slice(0, 200)}`);
     }
 
-    const contentType = upstream.headers.get('content-type') || 'video/x-matroska';
-    const contentLength = upstream.headers.get('content-length');
-    const acceptRanges = upstream.headers.get('accept-ranges');
+    const r2Url = upstream.headers.get('Location') || upstream.url;
 
-    const headers = {
-      'Content-Type': contentType,
-      'Content-Disposition': 'attachment; filename="video.mkv"',
-      'Accept-Ranges': acceptRanges || 'bytes',
+    const cacheResponse = new Response(r2Url, {
+      headers: {
+        'Cache-Control': 's-maxage=1800, max-age=1800',
+        'Content-Type': 'text/plain',
+      },
+    });
+    ctx.waitUntil(cache.put(cacheKey, cacheResponse));
+
+    return r2Url;
+  },
+
+  async proxyDirect(request, fileHash, shareableLinkId, env, ctx) {
+    let downloadUrl;
+    try {
+      downloadUrl = await this.getDownloadUrl(fileHash, shareableLinkId, env, ctx);
+    } catch (err) {
+      return Response.json({ error: err.message }, { status: 503 });
+    }
+
+    const upstreamHeaders = {};
+    const rangeHeader = request.headers.get('Range');
+    if (rangeHeader) {
+      upstreamHeaders['Range'] = rangeHeader;
+    }
+
+    const upstream = await fetch(downloadUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Referer': 'https://app.drime.cloud/',
+        ...upstreamHeaders,
+      },
+    });
+
+    const responseHeaders = {
+      'Content-Type': upstream.headers.get('Content-Type') || 'video/x-matroska',
+      'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
     };
 
-    if (contentLength) {
-      headers['Content-Length'] = contentLength;
+    if (upstream.headers.get('Content-Length')) {
+      responseHeaders['Content-Length'] = upstream.headers.get('Content-Length');
+    }
+    if (upstream.headers.get('Content-Range')) {
+      responseHeaders['Content-Range'] = upstream.headers.get('Content-Range');
     }
 
-    return new Response(upstream.body, { headers });
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
   },
 
   async proxyMaster(uuid, quality, workerBase, env) {
