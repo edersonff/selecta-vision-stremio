@@ -54,7 +54,8 @@ def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
 
     resp = requests.get(url)
     hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', resp.text)
-    return list(dict.fromkeys(hashes))
+    hashes = list(dict.fromkeys(hashes))
+    return hashes[:15]
 
 
 def fetch_drime_files(
