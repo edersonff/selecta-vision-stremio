@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright requests
+          pip install playwright requests playwright-stealth
           playwright install chromium --with-deps
 
       - name: Refresh Drime cookie
