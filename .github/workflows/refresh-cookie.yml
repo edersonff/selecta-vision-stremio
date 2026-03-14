@@ -28,7 +28,7 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          DRIME_HASH: ${{ secrets.DRIME_HASH }}
+          DRIME_HASH: GdjvdkyRKVrxyX0ahZFTm4BgBaWnR9
           WORKER_URL: https://selecta-vision-proxy.edersonff.workers.dev
         run: |
           cd worker/scripts

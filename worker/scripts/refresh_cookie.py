@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 import os
 import sys
-import time
 import requests
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
 
 CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID")
 CF_KV_NS_ID = os.environ.get("CF_KV_NAMESPACE_ID")
 CF_API_TOKEN = os.environ.get("CF_API_TOKEN")
+DRIME_HASH = os.environ.get("DRIME_HASH")
 
-if not all([CF_ACCOUNT_ID, CF_KV_NS_ID, CF_API_TOKEN]):
-    print("ERROR: Missing required variables:")
-    print("  CF_ACCOUNT_ID, CF_KV_NAMESPACE_ID, CF_API_TOKEN")
+if not all([CF_ACCOUNT_ID, CF_KV_NS_ID, CF_API_TOKEN, DRIME_HASH]):
+    print("ERROR: Missing required environment variables:")
+    print("  CF_ACCOUNT_ID, CF_KV_NAMESPACE_ID, CF_API_TOKEN, DRIME_HASH")
     sys.exit(1)
 
 KV_PUT_URL = (
@@ -20,58 +19,29 @@ KV_PUT_URL = (
     f"/storage/kv/namespaces/{CF_KV_NS_ID}/values/drime_cookie"
 )
 
-MAX_RETRIES = 10
-TIMEOUT_MS = 150000
-INITIAL_DELAY = 5
-
 
 def get_drime_cookie():
-    last_error = None
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+        )
+        page = context.new_page()
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-dev-shm-usage",
-                        "--no-sandbox",
-                    ],
-                )
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    viewport={"width": 1920, "height": 1080},
-                )
-                page = context.new_page()
-                Stealth().apply_stealth_sync(page)
+        print(f"Opening dri.me/{DRIME_HASH} ...")
+        page.goto(
+            f"https://dri.me/{DRIME_HASH}", wait_until="networkidle", timeout=30000
+        )
+        page.wait_for_timeout(3000)
 
-                print(f"Attempt {attempt}/{MAX_RETRIES}: Opening dri.me ...")
-                page.goto(
-                    "https://dri.me/",
-                    wait_until="domcontentloaded",
-                    timeout=TIMEOUT_MS,
-                )
-                page.wait_for_timeout(5000)
+        cookies = context.cookies()
+        browser.close()
 
-                cookies = context.cookies()
-                browser.close()
-
-                cookie_str = "; ".join(
-                    f"{c['name']}={c['value']}" for c in cookies if c["value"]
-                )
-                print(f"Cookie obtained: {len(cookie_str)} chars")
-                return cookie_str
-
-        except Exception as e:
-            last_error = e
-            delay = min(INITIAL_DELAY * (2 ** (attempt - 1)), 60)
-            print(f"Attempt {attempt} failed: {e}")
-            if attempt < MAX_RETRIES:
-                print(f"Retrying in {delay}s...")
-                time.sleep(delay)
-
-    raise RuntimeError(f"All {MAX_RETRIES} attempts failed. Last error: {last_error}")
+        cookie_str = "; ".join(
+            f"{c['name']}={c['value']}" for c in cookies if c["value"]
+        )
+        print(f"Cookie obtained: {len(cookie_str)} chars")
+        return cookie_str
 
 
 def push_to_kv(cookie: str) -> None:
@@ -102,7 +72,7 @@ def verify_worker(worker_url: str) -> None:
 if __name__ == "__main__":
     cookie = get_drime_cookie()
     if len(cookie) < 50:
-        print("ERROR: Cookie too short.")
+        print("ERROR: Cookie too short, something went wrong.")
         sys.exit(1)
 
     push_to_kv(cookie)
