@@ -25,9 +25,9 @@ KV_PUT_URL = (
     f"/storage/kv/namespaces/{CF_KV_NS_ID}/values/drime_cookie"
 )
 
-MAX_RETRIES = 5
-TIMEOUT_MS = 60000
-INITIAL_DELAY = 3
+MAX_RETRIES = 3
+TIMEOUT_MS = 30000
+INITIAL_DELAY = 2
 
 
 def get_drime_cookie():
@@ -53,8 +53,8 @@ def get_drime_cookie():
 
                 drime_url = f"https://app.drime.cloud/drive/s/{DRIME_HASH}"
                 print(f"Attempt {attempt}/{MAX_RETRIES}: Opening {drime_url}")
-                
-                page.goto(drime_url, wait_until="networkidle", timeout=TIMEOUT_MS)
+
+                page.goto(drime_url, wait_until="domcontentloaded", timeout=TIMEOUT_MS)
                 page.wait_for_timeout(3000)
 
                 cookies = context.cookies()
