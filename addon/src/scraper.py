@@ -53,9 +53,11 @@ def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
         return []
 
     resp = requests.get(url)
-    hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', resp.text)
-    hashes = list(dict.fromkeys(hashes))
-    return hashes[:15]
+    delimiter = '<div class="group-title">Servidores com a versão Menor.</div>'
+    delimiter_pos = resp.text.find(delimiter)
+    html_to_search = resp.text[:delimiter_pos] if delimiter_pos != -1 else resp.text
+    hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', html_to_search)
+    return list(dict.fromkeys(hashes))
 
 
 def fetch_drime_files(
