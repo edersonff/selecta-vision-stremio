@@ -2,7 +2,7 @@ name: Refresh Cookie
 
 on:
   schedule:
-    - cron: '*/90 * * * *'
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
