@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 
 
 MEMORIA_PAGES = {
-    "dbz": "https://memoriadatv.com/baixar/dbzggghhthy",
+    "dbz": "https://www.memoriadatv.com/link/dbzhdhdf",
     "db": "https://www.memoriadatv.com/dragon-ball-1986-1989-dual-audio-bluray-1080p/",
 }
 
@@ -53,7 +53,7 @@ def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
         return []
 
     resp = requests.get(url)
-    delimiter = '<div class="group-title">Servidores com a versão Menor.</div>'
+    delimiter = '📦 Versão Menor</h3>'
     delimiter_pos = resp.text.find(delimiter)
     html_to_search = resp.text[:delimiter_pos] if delimiter_pos != -1 else resp.text
     hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', html_to_search)
