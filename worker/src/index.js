@@ -113,16 +113,21 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
-    const upstream = await fetch(upstreamUrl, {
-      headers: { 'User-Agent': ua, 'Range': effectiveRange },
-    });
+    let upstream;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      upstream = await fetch(upstreamUrl, {
+        headers: { 'User-Agent': ua, 'Range': effectiveRange },
+      });
 
-    if (!upstream.ok) {
-      return Response.json({ error: `GDrive download failed: ${upstream.status}` }, { status: upstream.status });
+      if (!upstream.ok) continue;
+
+      const ct = upstream.headers.get('Content-Type') || '';
+      if (!ct.includes('text/html')) break;
+
+      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
     }
 
-    const ct = upstream.headers.get('Content-Type') || '';
-    if (ct.includes('text/html')) {
+    if (!upstream || !upstream.ok || (upstream.headers.get('Content-Type') || '').includes('text/html')) {
       return Response.json({ error: 'File temporarily unavailable' }, { status: 503 });
     }
 
