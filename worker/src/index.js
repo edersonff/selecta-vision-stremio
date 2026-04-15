@@ -1,3 +1,5 @@
+const fileSizeCache = new Map();
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -50,52 +52,94 @@ export default {
         });
       }
       const [, fileId] = gdriveMatch;
-      return this.proxyGoogleDrive(request, fileId);
+      return this.proxyGoogleDrive(request, fileId, ctx);
     }
 
     return new Response('Not found', { status: 404 });
   },
 
-  async proxyGoogleDrive(request, fileId) {
-    const upstreamHeaders = {
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-    };
-
-    const rangeHeader = request.headers.get('Range');
-    if (rangeHeader) {
-      upstreamHeaders['Range'] = rangeHeader;
-    }
-
-    const upstream = await fetch(
-      `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`,
-      { headers: upstreamHeaders },
-    );
-
-    if (!upstream.ok) {
-      return Response.json({ error: `GDrive download failed: ${upstream.status}` }, { status: upstream.status });
-    }
-
-    const responseHeaders = {
-      'Content-Type': upstream.headers.get('Content-Type') || 'video/x-matroska',
-      'Accept-Ranges': 'bytes',
+  async proxyGoogleDrive(request, fileId, ctx) {
+    const upstreamUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+    const ua = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+    const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Range',
       'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
     };
 
-    const contentLength = upstream.headers.get('Content-Length');
-    if (contentLength) {
-      responseHeaders['Content-Length'] = contentLength;
-    }
-    const contentRange = upstream.headers.get('Content-Range');
-    if (contentRange) {
-      responseHeaders['Content-Range'] = contentRange;
+    const getOrProbeSize = async () => {
+      if (fileSizeCache.has(fileId)) return fileSizeCache.get(fileId);
+      const probe = await fetch(upstreamUrl, {
+        headers: { 'User-Agent': ua, 'Range': 'bytes=0-0' },
+      });
+      if (probe.status !== 206) return null;
+      const cr = probe.headers.get('Content-Range') || '';
+      const total = parseInt(cr.split('/').pop() || '0', 10);
+      if (total > 0) fileSizeCache.set(fileId, total);
+      return total;
+    };
+
+    if (request.method === 'HEAD') {
+      const total = await getOrProbeSize();
+      if (!total) return new Response(null, { status: 503, headers: corsHeaders });
+      return new Response(null, {
+        status: 200,
+        headers: {
+          'Content-Type': 'video/x-matroska',
+          'Content-Length': String(total),
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+          ...corsHeaders,
+        },
+      });
     }
 
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: responseHeaders,
+    const rangeHeader = request.headers.get('Range');
+    let effectiveRange = rangeHeader || '';
+
+    if (!rangeHeader || rangeHeader.match(/^bytes=\d+-$/)) {
+      const total = await getOrProbeSize();
+      if (!total) return Response.json({ error: 'File temporarily unavailable' }, { status: 503 });
+      if (!rangeHeader) {
+        effectiveRange = `bytes=0-${Math.min(total - 1, 16777215)}`;
+      } else {
+        const start = parseInt(rangeHeader.match(/^bytes=(\d+)/)?.[1] || '0', 10);
+        effectiveRange = `bytes=${start}-${Math.min(total - 1, start + 16777215)}`;
+      }
+    }
+
+    const cache = caches.default;
+    const cacheKey = new Request(`${upstreamUrl}#${effectiveRange}`);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+
+    const upstream = await fetch(upstreamUrl, {
+      headers: { 'User-Agent': ua, 'Range': effectiveRange },
     });
+
+    if (!upstream.ok) {
+      return Response.json({ error: `GDrive download failed: ${upstream.status}` }, { status: upstream.status });
+    }
+
+    const ct = upstream.headers.get('Content-Type') || '';
+    if (ct.includes('text/html')) {
+      return Response.json({ error: 'File temporarily unavailable' }, { status: 503 });
+    }
+
+    const response = new Response(upstream.body, {
+      status: 206,
+      headers: {
+        'Content-Type': 'video/x-matroska',
+        'Content-Range': upstream.headers.get('Content-Range') || '',
+        'Content-Length': upstream.headers.get('Content-Length') || '',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=3600',
+        ...corsHeaders,
+      },
+    });
+
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   },
 
   async proxySegment(hash, uuid, path, workerBase, env) {
