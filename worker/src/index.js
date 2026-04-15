@@ -108,12 +108,11 @@ export default {
       }
     }
 
-    const cache = caches.default;
-    const cacheKey = new Request(`${upstreamUrl}#${effectiveRange}`);
-    const cached = await cache.match(cacheKey);
-    if (cached) return cached;
-
     let upstream;
+    const expectedChunk = effectiveRange
+      ? (() => { const m = effectiveRange.match(/bytes=(\d+)-(\d+)/); return m ? parseInt(m[2]) - parseInt(m[1]) + 1 : 0; })()
+      : 16777216;
+
     for (let attempt = 0; attempt < 3; attempt++) {
       upstream = await fetch(upstreamUrl, {
         headers: { 'User-Agent': ua, 'Range': effectiveRange },
@@ -122,29 +121,39 @@ export default {
       if (!upstream.ok) continue;
 
       const ct = upstream.headers.get('Content-Type') || '';
-      if (!ct.includes('text/html')) break;
+      if (ct.includes('text/html')) {
+        if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
 
-      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (expectedChunk > 0) {
+        const cl = parseInt(upstream.headers.get('Content-Length') || '0', 10);
+        if (cl > expectedChunk * 1.5) {
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 300));
+            continue;
+          }
+          return Response.json({ error: 'Upstream ignored range' }, { status: 503 });
+        }
+      }
+
+      break;
     }
 
     if (!upstream || !upstream.ok || (upstream.headers.get('Content-Type') || '').includes('text/html')) {
       return Response.json({ error: 'File temporarily unavailable' }, { status: 503 });
     }
 
-    const response = new Response(upstream.body, {
+    return new Response(upstream.body, {
       status: 206,
       headers: {
         'Content-Type': 'video/x-matroska',
         'Content-Range': upstream.headers.get('Content-Range') || '',
         'Content-Length': upstream.headers.get('Content-Length') || '',
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=3600',
         ...corsHeaders,
       },
     });
-
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
   },
 
   async proxySegment(hash, uuid, path, workerBase, env) {
