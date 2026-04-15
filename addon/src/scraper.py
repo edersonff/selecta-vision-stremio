@@ -2,17 +2,12 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-import requests
-from playwright.sync_api import sync_playwright
-
-
-MEMORIA_PAGES = {
-    "dbz": "https://www.memoriadatv.com/link/dbzhdhdf",
-    "db": "https://www.memoriadatv.com/dragon-ball-1986-1989-dual-audio-bluray-1080p/",
-}
+from gdrive import list_gdrive_files
 
 
 WORKER_BASE = "https://selecta-vision-proxy.edersonff.workers.dev"
+
+GDRIVE_FOLDER_ID = "1trhkrfBp94vjWyYO-PUaBDy0T80ErWfi"
 
 
 @dataclass
@@ -23,64 +18,6 @@ class Episode:
     file_hash: str
     shareable_link_id: str
     direct_url: str
-
-
-def get_drime_cookies() -> tuple[str, str]:
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
-
-        page.goto("https://dri.me/", wait_until="networkidle")
-        page.wait_for_timeout(2000)
-
-        cookies = context.cookies()
-        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
-
-        xsrf = ""
-        for c in cookies:
-            if c["name"] == "XSRF-TOKEN":
-                xsrf = c["value"]
-                break
-
-        browser.close()
-        return cookie_str, xsrf
-
-
-def get_drime_hashes_from_memoria(series_key: str) -> List[str]:
-    url = MEMORIA_PAGES.get(series_key)
-    if not url:
-        return []
-
-    resp = requests.get(url)
-    delimiter = '📦 Versão Menor</h3>'
-    delimiter_pos = resp.text.find(delimiter)
-    html_to_search = resp.text[:delimiter_pos] if delimiter_pos != -1 else resp.text
-    hashes = re.findall(r'href="https?://dri\.me/([a-zA-Z0-9]+)"', html_to_search)
-    return list(dict.fromkeys(hashes))
-
-
-def fetch_drime_files(
-    drime_hash: str, cookies: str, xsrf: str
-) -> tuple[List[dict], str]:
-    api_url = (
-        f"https://app.drime.cloud/api/v1/shareable-links/{drime_hash}?withEntries=true"
-    )
-
-    headers = {
-        "accept": "application/json",
-        "cookie": cookies,
-        "x-xsrf-token": xsrf,
-    }
-
-    resp = requests.get(api_url, headers=headers)
-    if resp.status_code != 200:
-        return [], ""
-
-    data = resp.json()
-    shareable_link_id = str(data.get("link", {}).get("id", ""))
-    files = data.get("folderChildren", {}).get("data", [])
-    return files, shareable_link_id
 
 
 def parse_episode_number(filename: str, series_key: str) -> Optional[int]:
@@ -101,40 +38,34 @@ def parse_episode_number(filename: str, series_key: str) -> Optional[int]:
     return None
 
 
-def scrape_series(series_key: str, cookies: str, xsrf: str) -> List[Episode]:
-    hashes = get_drime_hashes_from_memoria(series_key)
-    print(f"[{series_key}] Found {len(hashes)} Drime folders")
+def scrape_series(series_key: str) -> List[Episode]:
+    files = list_gdrive_files(GDRIVE_FOLDER_ID)
+    print(f"[{series_key}] Found {len(files)} files")
 
     episodes = []
-    for drime_hash in hashes:
-        files, shareable_link_id = fetch_drime_files(drime_hash, cookies, xsrf)
+    for f in files:
+        name = f.get("name", "")
+        ep_num = parse_episode_number(name, series_key)
 
-        if not shareable_link_id:
+        if not ep_num:
             continue
 
-        for f in files:
-            name = f.get("name", "")
-            ep_num = parse_episode_number(name, series_key)
+        file_id = f.get("id", "")
+        if not file_id:
+            continue
 
-            if not ep_num:
-                continue
+        direct_url = f"{WORKER_BASE}/gdrive/{file_id}"
 
-            file_hash = f.get("hash", "")
-            if not file_hash:
-                continue
-
-            direct_url = f"{WORKER_BASE}/direct/{file_hash}/{shareable_link_id}.mkv"
-
-            episodes.append(
-                Episode(
-                    series_key=series_key,
-                    number=ep_num,
-                    filename=name,
-                    file_hash=file_hash,
-                    shareable_link_id=shareable_link_id,
-                    direct_url=direct_url,
-                )
+        episodes.append(
+            Episode(
+                series_key=series_key,
+                number=ep_num,
+                filename=name,
+                file_hash=file_id,
+                shareable_link_id="",
+                direct_url=direct_url,
             )
+        )
 
     seen = set()
     unique = []
@@ -149,13 +80,7 @@ def scrape_series(series_key: str, cookies: str, xsrf: str) -> List[Episode]:
 
 
 def scrape_all_series() -> Dict[str, List[Episode]]:
-    cookies, xsrf = get_drime_cookies()
-
-    result = {}
-    for series_key in MEMORIA_PAGES:
-        result[series_key] = scrape_series(series_key, cookies, xsrf)
-
-    return result
+    return {"dbz": scrape_series("dbz")}
 
 
 if __name__ == "__main__":
