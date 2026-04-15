@@ -50,98 +50,15 @@ export default {
         });
       }
       const [, fileId] = gdriveMatch;
-      return this.proxyGoogleDrive(request, fileId, env);
+      return this.proxyGoogleDrive(request, fileId);
     }
 
     return new Response('Not found', { status: 404 });
   },
 
-  base64urlEncode(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  },
-
-  async getGdriveAccessToken(env) {
-    const privateKey = env.GOOGLE_DRIVE_PRIVATE_KEY;
-    const clientEmail = env.GOOGLE_DRIVE_CLIENT_EMAIL;
-
-    if (!privateKey || !clientEmail) {
-      throw new Error('Google Drive credentials not configured');
-    }
-
-    if (this._gdriveToken && this._gdriveTokenExpiresAt > Date.now()) {
-      return this._gdriveToken;
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      iss: clientEmail,
-      scope: 'https://www.googleapis.com/auth/drive.readonly',
-      aud: 'https://oauth2.googleapis.com/token',
-      iat: now,
-      exp: now + 3600,
-    };
-
-    const encodedHeader = this.base64urlEncode(new TextEncoder().encode(JSON.stringify(header)));
-    const encodedPayload = this.base64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
-    const unsignedJwt = `${encodedHeader}.${encodedPayload}`;
-
-    const pemContents = privateKey
-      .replace(/-----BEGIN PRIVATE KEY-----/, '')
-      .replace(/-----END PRIVATE KEY-----/, '')
-      .replace(/\s/g, '');
-    const pemBinary = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'pkcs8',
-      pemBinary,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-
-    const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
-      cryptoKey,
-      new TextEncoder().encode(unsignedJwt),
-    );
-
-    const signedJwt = `${unsignedJwt}.${this.base64urlEncode(signature)}`;
-
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signedJwt}`,
-    });
-
-    if (!tokenResponse.ok) {
-      const errorBody = await tokenResponse.text();
-      throw new Error(`OAuth2 token request failed: ${tokenResponse.status} - ${errorBody.slice(0, 200)}`);
-    }
-
-    const { access_token, expires_in } = await tokenResponse.json();
-
-    this._gdriveToken = access_token;
-    this._gdriveTokenExpiresAt = Date.now() + (expires_in - 60) * 1000;
-
-    return access_token;
-  },
-
-  async proxyGoogleDrive(request, fileId, env) {
-    let accessToken;
-    try {
-      accessToken = await this.getGdriveAccessToken(env);
-    } catch (err) {
-      return Response.json({ error: err.message }, { status: 503 });
-    }
-
+  async proxyGoogleDrive(request, fileId) {
     const upstreamHeaders = {
-      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
     };
 
     const rangeHeader = request.headers.get('Range');
@@ -150,17 +67,16 @@ export default {
     }
 
     const upstream = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`,
       { headers: upstreamHeaders },
     );
 
     if (!upstream.ok) {
-      const errorBody = await upstream.text();
-      return Response.json({ error: `GDrive API failed: ${upstream.status}`, details: errorBody.slice(0, 200) }, { status: upstream.status });
+      return Response.json({ error: `GDrive download failed: ${upstream.status}` }, { status: upstream.status });
     }
 
     const responseHeaders = {
-      'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+      'Content-Type': upstream.headers.get('Content-Type') || 'video/x-matroska',
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Range',
