@@ -35,7 +35,67 @@ export default {
       return this.proxyDirect(request, fileHash, shareableLinkId, env, ctx);
     }
 
+    const gdriveMatch = url.pathname.match(/^\/gdrive\/([^/]+)$/);
+    if (gdriveMatch) {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+      const [, fileId] = gdriveMatch;
+      return this.proxyGoogleDrive(request, fileId);
+    }
+
     return new Response('Not found', { status: 404 });
+  },
+
+  async proxyGoogleDrive(request, fileId) {
+    const upstreamHeaders = {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+    };
+
+    const rangeHeader = request.headers.get('Range');
+    if (rangeHeader) {
+      upstreamHeaders['Range'] = rangeHeader;
+    }
+
+    const upstream = await fetch(
+      `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`,
+      { headers: upstreamHeaders },
+    );
+
+    if (!upstream.ok) {
+      return Response.json({ error: `GDrive download failed: ${upstream.status}` }, { status: upstream.status });
+    }
+
+    const responseHeaders = {
+      'Content-Type': upstream.headers.get('Content-Type') || 'video/x-matroska',
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+    };
+
+    const contentLength = upstream.headers.get('Content-Length');
+    if (contentLength) {
+      responseHeaders['Content-Length'] = contentLength;
+    }
+    const contentRange = upstream.headers.get('Content-Range');
+    if (contentRange) {
+      responseHeaders['Content-Range'] = contentRange;
+    }
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
   },
 
   async proxySegment(hash, uuid, path, workerBase, env) {
