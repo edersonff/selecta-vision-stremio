@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
 
 permissions:
   contents: read
@@ -28,10 +30,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright requests
-          playwright install chromium --with-deps
+          pip install google-api-python-client requests
 
       - name: Build addon
+        env:
+          GOOGLE_DRIVE_CREDENTIALS: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
         run: |
           cd addon/src
           python main.py
