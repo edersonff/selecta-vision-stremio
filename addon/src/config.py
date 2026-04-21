@@ -4,7 +4,7 @@ SERIES_TEMPLATES = {
         "name": "Dragon Ball Z",
     },
     "db": {
-        "ids": ["tt0280249"],
+        "ids": ["tt0088509", "tt0280249"],
         "name": "Dragon Ball",
     },
 }
