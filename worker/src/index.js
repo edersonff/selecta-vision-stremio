@@ -175,7 +175,8 @@ export default {
   },
 
   async proxyMdtvdown(request, filename) {
-    const upstreamUrl = `https://cloud.mdtvdown.workers.dev/0:/Animes/Dragon%20Ball/Anime/Dragon%20Ball%20Z/Remux/${filename}`;
+    const prefix = filename.startsWith('DBC.') ? 'Dragon%20Ball%20Classico' : 'Dragon%20Ball%20Z';
+    const upstreamUrl = `https://cloud.mdtvdown.workers.dev/0:/Animes/Dragon%20Ball/Anime/${prefix}/Remux/${filename}`;
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Range',
