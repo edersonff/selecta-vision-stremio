@@ -37,6 +37,24 @@ export default {
       return this.proxyDirect(request, fileHash, shareableLinkId, env, ctx);
     }
 
+    const mdtvMatch = url.pathname.match(/^\/mdtv\/(.+\.mkv)$/);
+    if (mdtvMatch) {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+      const [, filename] = mdtvMatch;
+      return this.proxyMdtvdown(request, filename);
+    }
+
     const gdriveMatch = url.pathname.match(/^\/gdrive\/([^/]+)$/);
     if (gdriveMatch) {
       if (request.method === 'OPTIONS') {
@@ -153,6 +171,42 @@ export default {
         'Accept-Ranges': 'bytes',
         ...corsHeaders,
       },
+    });
+  },
+
+  async proxyMdtvdown(request, filename) {
+    const upstreamUrl = `https://cloud.mdtvdown.workers.dev/0:/Animes/Dragon%20Ball/Anime/Dragon%20Ball%20Z/Remux/${filename}`;
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+    };
+
+    const fetchHeaders = { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' };
+    const rangeHeader = request.headers.get('Range');
+    if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
+
+    const upstream = await fetch(upstreamUrl, { headers: fetchHeaders });
+
+    if (!upstream.ok) {
+      return Response.json({ error: 'Upstream failed', status: upstream.status }, { status: upstream.status, headers: corsHeaders });
+    }
+
+    const responseHeaders = {
+      'Content-Type': upstream.headers.get('Content-Type') || 'video/x-matroska',
+      'Content-Disposition': upstream.headers.get('Content-Disposition') || '',
+      ...corsHeaders,
+    };
+    if (upstream.headers.get('Content-Range')) {
+      responseHeaders['Content-Range'] = upstream.headers.get('Content-Range');
+    }
+    if (upstream.headers.get('Content-Length')) {
+      responseHeaders['Content-Length'] = upstream.headers.get('Content-Length');
+    }
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: responseHeaders,
     });
   },
 

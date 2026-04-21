@@ -54,7 +54,7 @@ def scrape_series(series_key: str) -> List[Episode]:
         if not file_id:
             continue
 
-        direct_url = f"{WORKER_BASE}/gdrive/{file_id}"
+        direct_url = f"{WORKER_BASE}/mdtv/{name}"
 
         episodes.append(
             Episode(
