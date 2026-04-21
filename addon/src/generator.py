@@ -15,37 +15,35 @@ from config import (
 from scraper import Episode
 
 
-SERIES_SEASONS = {
-    "dbz": [
-        (1, 39),
-        (40, 74),
-        (75, 107),
-        (108, 139),
-        (140, 165),
-        (166, 194),
-        (195, 219),
-        (220, 253),
-        (254, 291),
+SEASON_MAPS = {
+    "tt0121220": [
+        (1, 39), (40, 74), (75, 107), (108, 139),
+        (140, 165), (166, 194), (195, 219), (220, 253), (254, 291),
     ],
-    "db": [
-        (1, 28),
-        (29, 53),
-        (54, 101),
-        (102, 122),
-        (123, 153),
+    "tt0214341": [
+        (1, 39), (40, 74), (75, 107), (108, 139),
+        (140, 165), (166, 194), (195, 219), (220, 253), (254, 291),
+    ],
+    "tt0088509": [
+        (1, 13), (14, 28), (29, 68), (69, 101), (102, 132), (133, 153),
+    ],
+    "tt0280249": [
+        (1, 28), (29, 53), (54, 101), (102, 122), (123, 153),
     ],
 }
 
+DEFAULT_SEASONS = [(1, 999)]
 
-def get_season(episode_number: int, series_key: str = "dbz") -> int:
-    for season, (start, end) in enumerate(SERIES_SEASONS.get(series_key, SERIES_SEASONS["dbz"]), 1):
+
+def get_season(episode_number: int, imdb_id: str = "tt0121220") -> int:
+    for season, (start, end) in enumerate(SEASON_MAPS.get(imdb_id, DEFAULT_SEASONS), 1):
         if start <= episode_number <= end:
             return season
     return 1
 
 
-def get_season_episode(episode_number: int, series_key: str = "dbz") -> int:
-    for season, (start, end) in enumerate(SERIES_SEASONS.get(series_key, SERIES_SEASONS["dbz"]), 1):
+def get_season_episode(episode_number: int, imdb_id: str = "tt0121220") -> int:
+    for season, (start, end) in enumerate(SEASON_MAPS.get(imdb_id, DEFAULT_SEASONS), 1):
         if start <= episode_number <= end:
             return episode_number - start + 1
     return episode_number
@@ -122,9 +120,9 @@ def generate_addon_files(
 
         for episode in episodes:
             stream_data = build_stream(episode, series_key)
-            season = get_season(episode.number, series_key)
-            season_ep = get_season_episode(episode.number, series_key)
             for series_id in template["ids"]:
+                season = get_season(episode.number, series_id)
+                season_ep = get_season_episode(episode.number, series_id)
                 stream_id = f"{series_id}:{season}:{season_ep}"
                 write_json(
                     f"{output_dir}/stream/series/{stream_id}.json",
