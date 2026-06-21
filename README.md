@@ -77,3 +77,6 @@ If you are the rights holder and want this addon removed, contact: ederr@ederr.c
 ## License
 
 MIT
+
+
+v1
